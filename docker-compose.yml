@@ -1,0 +1,42 @@
+# One-shot: build both Ubuntu bundles, write ../aptly-offline/{24.04,26.04}/.
+# Run from this directory (aptly-offline-bundle).
+#
+# Local only:
+#   docker compose run --rm aptly-offline
+#
+# Also mirror to USB (plug stick first; override path if needed):
+#   docker compose --profile usb run --rm aptly-offline-usb
+#
+# Pin base images:
+#   UBUNTU_24_TAG=noble-20250416 UBUNTU_26_TAG=26.04 docker compose build
+
+services:
+  aptly-offline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UBUNTU_24_TAG: ${UBUNTU_24_TAG:-24.04}
+        UBUNTU_26_TAG: ${UBUNTU_26_TAG:-26.04}
+    image: aptly-offline:all
+    volumes:
+      - type: bind
+        source: ../aptly-offline
+        target: /export
+
+  aptly-offline-usb:
+    profiles: ["usb"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UBUNTU_24_TAG: ${UBUNTU_24_TAG:-24.04}
+        UBUNTU_26_TAG: ${UBUNTU_26_TAG:-26.04}
+    image: aptly-offline:all
+    volumes:
+      - type: bind
+        source: ../aptly-offline
+        target: /export
+      - type: bind
+        source: ${APTLY_USB:-/run/media/ori/USB DISK}/aptly-offline
+        target: /usb

@@ -1,0 +1,2 @@
+# Ignore .deb if copied into this folder by mistake
+*.deb
