@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-APTLY_USB="${APTLY_USB:-/run/media/ori/USB DISK}"
+APTLY_USB="${APTLY_USB:-/run/media/ori/USB DISK1}"
 export APTLY_USB
 
 if [[ "${SKIP_USB:-0}" == 1 ]]; then

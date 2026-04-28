@@ -1,12 +1,14 @@
-# Aptly offline `.deb` bundle (Ubuntu 24.04 + 26.04 amd64)
+# Aptly Repository Generator (Ubuntu 24.04 + 26.04 amd64)
 
-One **multi-stage Dockerfile** builds both Ubuntu releases and packs **`/aptly-offline/{24.04,26.04}/`** into image **`aptly-offline:all`**. A short **`copy-out.sh`** entrypoint copies those trees to bind-mounted **`/export`** (and **`/usb`** when you use the USB profile).
+**⚠️ IMPORTANT: This generates FULL Ubuntu repository mirrors. Expect 6+ hours build time and several GB per release.**
+
+One **multi-stage Dockerfile** creates complete Ubuntu repository mirrors for both 24.04 and 26.04 releases, downloading full `main` and `universe` components plus security updates from official Ubuntu repositories (`http://archive.ubuntu.com/ubuntu` and `http://security.ubuntu.com/ubuntu`). The result is packaged as **`aptly-repo-<version>.tar.gz`** archives containing complete `dists/` and `pool/` directories that can be served as full APT repositories. A short **`copy-out.sh`** entrypoint copies those archives to bind-mounted **`/export`** (and **`/usb`** when you use the USB profile).
 
 ```text
 dockers/
   aptly-offline/
-    24.04/                 # *.deb (exported here)
-    26.04/
+    24.04/                 # aptly-repo-24.04.tar.gz (exported here)
+    26.04/                 # aptly-repo-26.04.tar.gz
   aptly-offline-bundle/
     Dockerfile             # multi-stage: bundle-2404, bundle-2604, export
     docker-compose.yml
@@ -24,7 +26,7 @@ From **`aptly-offline-bundle`**:
 docker compose run --rm aptly-offline
 ```
 
-This **builds** (if needed) and writes **`../aptly-offline/24.04/`** and **`../aptly-offline/26.04/`**.
+This **builds** (if needed) and writes **`../aptly-offline/24.04/aptly-repo-24.04.tar.gz`** and **`../aptly-offline/26.04/aptly-repo-26.04.tar.gz`**.
 
 ### USB as well (plug the stick first)
 
@@ -32,12 +34,12 @@ This **builds** (if needed) and writes **`../aptly-offline/24.04/`** and **`../a
 docker compose --profile usb run --rm aptly-offline-usb
 ```
 
-Mirrors the same trees to **`${APTLY_USB:-/run/media/ori/USB DISK}/aptly-offline/{24.04,26.04}/`**.
+Mirrors the same repository archives to **`${APTLY_USB:-/run/media/ori/USB DISK1}/aptly-offline/{24.04,26.04}/`**.
 
 If the default path has spaces, set the base mount explicitly:
 
 ```bash
-export APTLY_USB='/run/media/ori/USB DISK'
+export APTLY_USB='/run/media/ori/USB DISK1'
 docker compose --profile usb run --rm aptly-offline-usb
 ```
 
@@ -60,7 +62,7 @@ With USB:
 ```bash
 docker run --rm \
   -v "$(pwd)/../aptly-offline:/export" \
-  -v "/run/media/ori/USB DISK/aptly-offline:/usb" \
+  -v "/run/media/ori/USB DISK1/aptly-offline:/usb" \
   aptly-offline:all
 ```
 
@@ -90,30 +92,51 @@ docker build \
 |----------|---------|---------|
 | `UBUNTU_24_TAG` | `24.04` | `docker compose build` / `docker build` |
 | `UBUNTU_26_TAG` | `26.04` | same |
-| `APTLY_USB` | `/run/media/ori/USB DISK` | `aptly-offline-usb` volume source (base path; `aptly-offline` is appended) |
+| `APTLY_USB` | `/run/media/ori/USB DISK1` | `aptly-offline-usb` volume source (base path; `aptly-offline` is appended) |
 | `SKIP_USB` | unset | **`build-debs.sh` only** — `1` runs local export only |
 
 ## What the Dockerfile does
 
-1. **Stage `bundle-2404`** — `FROM ubuntu:${UBUNTU_24_TAG}`, `apt-get install -y -d aptly`, copy `*.deb` to `/bundle/out/24.04/`.
-2. **Stage `bundle-2604`** — same for 26.04 → `/bundle/out/26.04/`.
-3. **Stage `export`** — Alpine image with both trees under `/aptly-offline/24.04` and `/aptly-offline/26.04`, **`ENTRYPOINT`** runs **`copy-out.sh`** to **`/export`** and optionally **`/usb`**.
+1. **Stage `bundle-2404`** — `FROM ubuntu:${UBUNTU_24_TAG}`, installs `aptly`, creates mirrors from `http://archive.ubuntu.com/ubuntu` and `http://security.ubuntu.com/ubuntu` for the noble distribution, updates mirrors, creates and merges snapshots, publishes the repository, and packages it as `aptly-repo-24.04.tar.gz`.
+2. **Stage `bundle-2604`** — same process for 26.04 (resolute distribution) → `aptly-repo-26.04.tar.gz`.
+3. **Stage `export`** — Alpine image with both repository archives under `/aptly-offline/{24.04,26.04}/`, **`ENTRYPOINT`** runs **`copy-out.sh`** to copy archives to **`/export`** and optionally **`/usb`**.
 
-Download-only install resolves **virtual** packages (unlike `apt-rdepends | xargs apt download`).
+The resulting `.tar.gz` files contain complete Debian repository structures with `dists/` and `pool/` directories that can be served as APT repositories.
 
-## Offline install
+### What's included:
+- **main** component (officially supported packages)
+- **universe** component (community-maintained packages)  
+- **security** updates for both components
+- **Architecture**: amd64 only
+- **Size**: ~3-5GB per release when compressed
 
-On a host **matching that Ubuntu release and amd64**:
+### What's NOT included:
+- **restricted** and **multiverse** components
+- Source packages (only binary packages)
+- Other architectures (arm64, i386, etc.)
+
+## Using the offline repository
+
+Extract and serve the repository archive on a host **matching that Ubuntu release and amd64**:
 
 ```bash
 cd /path/to/aptly-offline/24.04   # or 26.04
-sudo dpkg -i *.deb
-sudo apt-get install -f -y   # if dpkg reports missing deps
+tar -xzf aptly-repo-24.04.tar.gz
+# This creates dists/ and pool/ directories
+
+# Serve via HTTP (example with Python)
+python3 -m http.server 8080
+# Add to /etc/apt/sources.list on target machines:
+# deb http://your-server-ip:8080/ noble main universe
+# deb http://your-server-ip:8080/ noble-security main universe
 ```
+
+Or copy the extracted repository to `/var/www/html/` or similar web server document root.
 
 ## Interactive shell (inspect the export image)
 
 ```bash
 docker run --rm -it --entrypoint /bin/sh aptly-offline:all
 # ls /aptly-offline/24.04
+# tar -tzf /aptly-offline/24.04/aptly-repo-24.04.tar.gz | head -20
 ```

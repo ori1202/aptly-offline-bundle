@@ -38,5 +38,5 @@ services:
         source: ../aptly-offline
         target: /export
       - type: bind
-        source: ${APTLY_USB:-/run/media/ori/USB DISK}/aptly-offline
+        source: ${APTLY_USB:-/run/media/ori/USB DISK1}/aptly-offline
         target: /usb
