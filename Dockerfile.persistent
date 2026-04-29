@@ -1,0 +1,20 @@
+# Persistent build: aptly workspace is mounted from host
+ARG UBUNTU_TAG=24.04
+FROM ubuntu:${UBUNTU_TAG}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN mkdir -p /export /usb \
+    && apt-get update -qq \
+    && apt-get install -y -qq aptly gpg ubuntu-keyring ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Initialize GPG
+RUN mkdir -p ~/.gnupg && chmod 700 ~/.gnupg \
+    && gpg --no-default-keyring --keyring /usr/share/keyrings/ubuntu-archive-keyring.gpg --export | gpg --no-default-keyring --keyring trustedkeys.gpg --import
+
+# Build script that uses persistent /root/.aptly (mounted from host)
+COPY build-persistent.sh /build-persistent.sh
+RUN chmod +x /build-persistent.sh
+
+ENTRYPOINT ["/build-persistent.sh"]

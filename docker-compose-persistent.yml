@@ -1,0 +1,26 @@
+# Build with persistent storage - see progress in real-time
+# Usage: docker compose -f docker-compose-persistent.yml run --rm aptly-build
+
+services:
+  aptly-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.persistent
+      args:
+        UBUNTU_24_TAG: ${UBUNTU_24_TAG:-24.04}
+        UBUNTU_26_TAG: ${UBUNTU_26_TAG:-26.04}
+    volumes:
+      # Mount aptly workspace to host for persistent storage
+      - type: bind
+        source: ../aptly-build-cache
+        target: /root/.aptly
+      # Mount output directory  
+      - type: bind
+        source: ../aptly-offline
+        target: /export
+      # Optional: Mount USB
+      - type: bind
+        source: ${APTLY_USB:-/run/media/ori/USB DISK1}/aptly-offline
+        target: /usb
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
